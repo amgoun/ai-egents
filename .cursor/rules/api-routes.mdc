@@ -1,0 +1,20 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+---
+description: Guidelines for implementing Next.js API routes
+globs: 
+alwaysApply: false
+---
+# API Routes
+
+## Implementation Guidelines
+
+- Use Zod for request body validation
+- Create separate functions for business logic
+- Wrap route handlers with `withError` middleware
+- Export typed responses for client usage
+
+- For routes with dynamic parameters, use the new Next.js 15+ params format with async params

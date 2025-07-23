@@ -1,0 +1,19 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+---
+description: Guidelines for implementing Next.js server actions
+globs: 
+alwaysApply: false
+---
+# Server Actions
+
+## Implementation Guidelines
+- Implement type-safe server actions with proper validation
+- Define input schemas using Zod for robust type checking and validation
+- Handle errors gracefully and return appropriate responses
+- Ensure all server actions return the `Promise<ServerActionResponse>` type
+
+- The zod schema will also be used on the client for form validation.
