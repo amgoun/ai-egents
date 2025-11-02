@@ -8,13 +8,21 @@ const nextConfig = {
   },
   images: {
     unoptimized: true,
-    domains: ['neeyzyrpxexfghagdgra.supabase.co'],
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: 'neeyzyrpxexfghagdgra.supabase.co',
+        hostname: 'neeyzyrrxexfghagdgra.supabase.co',
         port: '',
-        pathname: '/storage/v1/object/**',
+        pathname: '/storage/v1/object/public/**',
+        search: '',
+      },
+      // Add fallback pattern for different hostname variations
+      {
+        protocol: 'https',
+        hostname: '**.supabase.co',
+        port: '',
+        pathname: '/storage/v1/object/public/**',
+        search: '',
       },
     ],
   },

@@ -49,7 +49,7 @@ export async function GET() {
           description: chat.agent.description || '',
           avatarUrl: chat.agent.avatar_url || null,
           modelProvider: chat.agent.model_provider || 'OpenAI',
-          modelVersion: chat.agent.model_version || 'gpt-4'
+          modelVersion: chat.agent.model_version || 'gpt-4o-mini'
         }
       }))
 

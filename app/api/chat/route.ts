@@ -1,6 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { estimateTokens, createNewUsagePeriod, hasExceededTokenLimit } from '@/lib/utils/token-counter'
+import OpenAI from 'openai'
+import { searchSimilarContent, combineContext } from '@/lib/db/vector'
 
 // API input validation schema
 const chatMessageSchema = z.object({
@@ -26,7 +29,7 @@ export async function POST(request: Request) {
     const body = await request.json()
     const validatedData = chatMessageSchema.parse(body)
 
-    // Get agent details
+    // Get agent details (snake_case from DB)
     const { data: agent } = await supabase
       .from('agents')
       .select('*')
@@ -37,6 +40,79 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: 'Agent not found' },
         { status: 404 }
+      )
+    }
+
+    // Check token limits BEFORE processing
+    let usageLimit = null
+    const { data: existingUsage } = await supabase
+      .from('usage_limits')
+      .select('*')
+      .eq('user_id', user.id)
+      .gte('period_end', new Date().toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    if (!existingUsage) {
+      // No current usage period found, create one
+      const newPeriod = createNewUsagePeriod('free') // Default to free plan
+      const { data: newUsage, error: createError } = await supabase
+        .from('usage_limits')
+        .insert({
+          user_id: user.id,
+          message_count: 0,
+          agent_count: 0,
+          tokens_used: 0,
+          tokens_limit: newPeriod.tokensLimit,
+          plan_type: newPeriod.planType,
+          period_start: newPeriod.periodStart.toISOString(),
+          period_end: newPeriod.periodEnd.toISOString()
+        })
+        .select()
+        .single()
+
+      if (createError || !newUsage) {
+        console.error('Error creating usage limits:', createError)
+        return NextResponse.json(
+          { error: 'Failed to initialize usage tracking' },
+          { status: 500 }
+        )
+      }
+      usageLimit = newUsage
+    } else {
+      usageLimit = existingUsage
+    }
+
+    // Estimate tokens for user message
+    const estimatedInputTokens = estimateTokens(validatedData.message, agent.modelVersion || 'gpt-4o-mini')
+    
+    // Check if user has exceeded token limit
+    if (hasExceededTokenLimit(usageLimit.tokensUsed, usageLimit.tokensLimit)) {
+      return NextResponse.json(
+        { 
+          error: 'Token limit exceeded', 
+          message: `You have reached your monthly token limit of ${(usageLimit.tokensLimit / 1_000).toFixed(0)}K tokens. Upgrade to Pro for 10M tokens/month!`,
+          tokensUsed: usageLimit.tokensUsed,
+          tokensLimit: usageLimit.tokensLimit,
+          planType: usageLimit.planType
+        },
+        { status: 429 } // Too Many Requests
+      )
+    }
+    
+    // Check if estimated token usage would exceed limit
+    if (usageLimit.tokensUsed + estimatedInputTokens > usageLimit.tokensLimit) {
+      return NextResponse.json(
+        { 
+          error: 'Message too large', 
+          message: `This message would exceed your token limit. You have ${usageLimit.tokensLimit - usageLimit.tokensUsed} tokens remaining, but this message needs ~${estimatedInputTokens} tokens.`,
+          tokensUsed: usageLimit.tokensUsed,
+          tokensLimit: usageLimit.tokensLimit,
+          estimatedTokens: estimatedInputTokens,
+          planType: usageLimit.planType
+        },
+        { status: 429 } // Too Many Requests
       )
     }
 
@@ -68,26 +144,91 @@ export async function POST(request: Request) {
       sessionId = newSession.id
     }
 
-    // Generate AI response based on context
-    let aiResponse = ''
-    const messageText = validatedData.message.toLowerCase().trim()
+    // Normalize DB fields to camelCase for internal use
+    const agentConfig = {
+      id: agent.id as number,
+      name: agent.name as string,
+      topicExpertise: (agent as any).topic_expertise as string | undefined,
+      modelProvider: (agent as any).model_provider as string | undefined,
+      modelVersion: (agent as any).model_version as string | undefined,
+      systemPrompt: (agent as any).system_prompt as string | undefined,
+      temperature: (agent as any).temperature as number | undefined,
+    }
 
-    // Handle greetings
-    if (messageText.match(/^(hi|hello|hey|greetings|howdy)/i)) {
-      aiResponse = `Hi! I'm ${agent.name}, your ${agent.topic_expertise} expert. How can I help you today?`
+    // Generate AI response using agent resources (RAG) when available
+    let aiResponse = ''
+    try {
+      console.log('🔍 Searching for similar content:', { query: validatedData.message, agentId: agentConfig.id })
+      const similar = await searchSimilarContent(validatedData.message, agentConfig.id)
+      console.log(`📊 Found ${similar?.length || 0} similar chunks`)
+      
+      const ragContext = combineContext(similar)
+      console.log(`📝 RAG context length: ${ragContext.length} characters`)
+
+      if (agentConfig.modelProvider === 'OpenAI' && process.env.OPENAI_API_KEY) {
+        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+        const system = [
+          `You are ${agentConfig.name}, an expert in ${agentConfig.topicExpertise}.`,
+          agentConfig.systemPrompt || '',
+          ragContext 
+            ? 'IMPORTANT: Use the CONTEXT provided below to answer the question. The context comes from documents uploaded specifically for this agent. Answer directly based on this context.'
+            : 'Answer based on your expertise. No additional context is available.'
+        ].filter(Boolean).join('\n\n')
+
+        const messagesForModel: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+          { role: 'system', content: system },
+        ]
+        
+        if (ragContext) {
+          messagesForModel.push({ role: 'system', content: `CONTEXT FROM UPLOADED DOCUMENTS:\n\n${ragContext}` })
+        }
+        
+        messagesForModel.push({ role: 'user', content: validatedData.message })
+
+        const model = agentConfig.modelVersion || 'gpt-4o-mini'
+        const completion = await openai.chat.completions.create({
+          model,
+          messages: messagesForModel,
+          temperature: typeof agentConfig.temperature === 'number' ? Math.min(Math.max(agentConfig.temperature / 100, 0), 2) : 0.7
+        })
+        aiResponse = completion.choices[0]?.message?.content?.trim() || ''
+      }
+
+      if (!aiResponse) {
+        const messageText = validatedData.message.toLowerCase().trim()
+        if (messageText.match(/^(hi|hello|hey|greetings|howdy)/i)) {
+          aiResponse = `Hi! I'm ${agentConfig.name}, your ${agentConfig.topicExpertise} expert. How can I help you today?`
+        } else if (messageText.match(/^(bye|goodbye|see you|farewell)/i)) {
+          aiResponse = `Goodbye! Feel free to come back if you need any more help with ${agentConfig.topicExpertise}!`
+        } else if (messageText.match(/^(thanks|thank you|thx)/i)) {
+          aiResponse = `You're welcome! Let me know if you need anything else related to ${agentConfig.topicExpertise}.`
+        } else {
+          aiResponse = ragContext
+            ? `Based on your resources, here's relevant info:\n\n${ragContext}\n\nNow, regarding your question: ${validatedData.message}`
+            : `I'll help you with "${validatedData.message}" from a ${agentConfig.topicExpertise} perspective. What specific aspects would you like me to address?`
+        }
+      }
+    } catch (ragError: any) {
+      console.error('RAG pipeline error:', ragError)
+      
+      // Check if it's an OpenAI quota error
+      if (ragError?.message?.includes('quota') || ragError?.message?.includes('429')) {
+        return NextResponse.json(
+          { 
+            error: 'OpenAI API quota exceeded', 
+            message: 'Your OpenAI API key has run out of credits. Please add credits at https://platform.openai.com/account/billing or update your API key in .env.local',
+            details: 'The RAG pipeline requires OpenAI credits to generate embeddings and responses.'
+          },
+          { status: 429 }
+        )
+      }
+      
+      aiResponse = `I'll help you with "${validatedData.message}" from a ${agentConfig.topicExpertise} perspective. What specific aspects would you like me to address?`
     }
-    // Handle goodbyes
-    else if (messageText.match(/^(bye|goodbye|see you|farewell)/i)) {
-      aiResponse = `Goodbye! Feel free to come back if you need any more help with ${agent.topic_expertise}!`
-    }
-    // Handle thank you
-    else if (messageText.match(/^(thanks|thank you|thx)/i)) {
-      aiResponse = `You're welcome! Let me know if you need anything else related to ${agent.topic_expertise}.`
-    }
-    // Default response using agent's expertise
-    else {
-      aiResponse = `I'll help you with "${validatedData.message}" from a ${agent.topic_expertise} perspective. What specific aspects would you like me to address?`
-    }
+
+    // Estimate tokens for AI response
+    const estimatedOutputTokens = estimateTokens(aiResponse, agentConfig.modelVersion || 'gpt-4o-mini')
+    const totalTokens = estimatedInputTokens + estimatedOutputTokens
 
     // Save user message
     const { data: userMessage, error: userError } = await supabase
@@ -119,9 +260,50 @@ export async function POST(request: Request) {
       throw new Error('Failed to save AI response')
     }
 
+    // Update usage limits and log token usage
+    await Promise.all([
+      // Update usage limits
+      supabase
+        .from('usage_limits')
+        .update({ 
+          tokens_used: usageLimit.tokensUsed + totalTokens,
+          message_count: usageLimit.messageCount + 1 
+        })
+        .eq('id', usageLimit.id),
+      
+      // Log detailed token usage for user message
+      supabase
+        .from('token_usage')
+        .insert({
+          user_id: user.id,
+          session_id: sessionId,
+          agent_id: agent.id,
+          message_id: userMessage.id,
+          tokens_used: estimatedInputTokens,
+          model_used: agentConfig.modelVersion || 'gpt-4o-mini',
+          operation_type: 'chat'
+        }),
+
+      // Log detailed token usage for AI response
+      supabase
+        .from('token_usage')
+        .insert({
+          user_id: user.id,
+          session_id: sessionId,
+          agent_id: agent.id,
+          message_id: aiMessage.id,
+          tokens_used: estimatedOutputTokens,
+          model_used: agentConfig.modelVersion || 'gpt-4o-mini',
+          operation_type: 'chat'
+        })
+    ])
+
     return NextResponse.json({
       sessionId,
-      messages: [userMessage, aiMessage]
+      messages: [userMessage, aiMessage],
+      tokensUsed: totalTokens,
+      remainingTokens: usageLimit.tokensLimit - (usageLimit.tokensUsed + totalTokens),
+      usagePercentage: ((usageLimit.tokensUsed + totalTokens) / usageLimit.tokensLimit) * 100
     })
 
   } catch (error) {

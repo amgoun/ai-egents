@@ -9,6 +9,7 @@ export async function uploadAgentAvatar(userId: string, file: Blob, oldAvatarPat
   try {
     // Delete old avatar if it exists
     if (oldAvatarPath) {
+      console.log('🗑️ Deleting old avatar:', oldAvatarPath)
       try {
         const { error: deleteError } = await supabaseClient
           .storage
@@ -16,12 +17,16 @@ export async function uploadAgentAvatar(userId: string, file: Blob, oldAvatarPat
           .remove([oldAvatarPath])
 
         if (deleteError) {
-          console.error('Error deleting old avatar:', deleteError)
+          console.error('❌ Error deleting old avatar:', deleteError)
+        } else {
+          console.log('✅ Old avatar deleted successfully')
         }
       } catch (deleteError) {
-        console.error('Failed to delete old avatar:', deleteError)
+        console.error('❌ Failed to delete old avatar:', deleteError)
         // Continue with upload even if delete fails
       }
+    } else {
+      console.log('ℹ️ No old avatar to delete (first upload for this agent)')
     }
 
     // Generate a unique filename
@@ -58,11 +63,44 @@ export async function uploadAgentAvatar(userId: string, file: Blob, oldAvatarPat
       .getPublicUrl(uploadData.path)
 
     console.log('Generated public URL:', publicUrl)
+    
+    // Detailed URL analysis
+    try {
+      const url = new URL(publicUrl)
+      console.log('🔍 Generated URL Analysis:', {
+        fullUrl: publicUrl,
+        hostname: url.hostname,
+        pathname: url.pathname,
+        expectedPattern: '/storage/v1/object/public/agent-avatar/',
+        actualPattern: url.pathname.substring(0, 35),
+        patternMatch: url.pathname.startsWith('/storage/v1/object/public/agent-avatar/'),
+        pathSegments: url.pathname.split('/'),
+        expectedHostname: 'neeyzyrrxexfghagdgra.supabase.co',
+        hostnameMatch: url.hostname === 'neeyzyrrxexfghagdgra.supabase.co'
+      })
+    } catch (urlError) {
+      console.error('URL analysis error:', urlError)
+    }
 
     // Verify URL format
     if (!publicUrl || !publicUrl.startsWith('http')) {
       console.error('Invalid public URL:', publicUrl)
       throw new Error('Failed to generate valid public URL')
+    }
+
+    // Test the URL immediately after generation
+    try {
+      console.log('🧪 Testing generated URL...')
+      const testResponse = await fetch(publicUrl)
+      console.log('📡 URL test result:', {
+        url: publicUrl,
+        status: testResponse.status,
+        ok: testResponse.ok,
+        contentType: testResponse.headers.get('content-type'),
+        statusText: testResponse.statusText
+      })
+    } catch (testError) {
+      console.error('📡 URL test failed:', testError)
     }
 
     return {

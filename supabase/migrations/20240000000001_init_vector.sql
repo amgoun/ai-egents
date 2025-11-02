@@ -8,7 +8,7 @@ create table if not exists agent_training_data (
   content text, -- raw content
   chunks text[], -- chunks of content for better context
   metadata jsonb, -- metadata about the document (file type, name, etc.)
-  embedding vector(1536), -- OpenAI embedding vector
+  embedding vector(1536), -- OpenAI embedding vector (matches text-embedding-3-small)
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 

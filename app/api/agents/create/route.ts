@@ -1,13 +1,14 @@
 import { createClient } from '@/lib/supabase/server'
 import { uploadAgentAvatar } from '@/lib/supabase/storage'
 import { NextResponse } from 'next/server'
+import { uploadAgentResource } from '@/lib/agent-resources'
 import { z } from 'zod'
 
 // API input validation schema
 const createAgentSchema = z.object({
   name: z.string().min(2),
   modelProvider: z.enum(["OpenAI", "Anthropic"]),
-  modelVersion: z.enum(["gpt-4", "gpt-4.1", "claude-3.5-sonnet", "claude-3.7-sonnet"], {
+  modelVersion: z.enum(["gpt-4o-mini", "gpt-4o", "claude-3.5-sonnet", "claude-3.7-sonnet"], {
     required_error: "Please select a model version.",
   }),
   visibility: z.enum(["public", "private"]),
@@ -41,6 +42,8 @@ export async function POST(request: Request) {
 
     let validatedData: z.infer<typeof createAgentSchema>
     let avatarImage: File | null = null
+    const resourceFiles: File[] = []
+    const rejectedFiles: Array<{ name: string; reason: string }> = []
 
     // Check content type to determine how to parse the request
     const contentType = request.headers.get('content-type') || ''
@@ -50,6 +53,18 @@ export async function POST(request: Request) {
       const formData = await request.formData()
       const jsonData = formData.get('data')
       avatarImage = formData.get('avatarImage') as File | null
+      const files = formData.getAll('resourceFiles')
+      files.forEach((f) => {
+        if (f instanceof File) {
+          const isPdf = f.type === 'application/pdf'
+          const isText = f.type.startsWith('text/')
+          if (isPdf || isText) {
+            resourceFiles.push(f)
+          } else {
+            rejectedFiles.push({ name: f.name, reason: 'Unsupported file type. Only PDF and text files are allowed.' })
+          }
+        }
+      })
       
       if (!jsonData || typeof jsonData !== 'string') {
         throw new Error('Invalid form data')
@@ -66,7 +81,7 @@ export async function POST(request: Request) {
     const insertData: {
       name: string;
       model_provider: "OpenAI" | "Anthropic";
-      model_version: "gpt-4" | "gpt-4.1" | "claude-3.5-sonnet" | "claude-3.7-sonnet";
+      model_version: "gpt-4o-mini" | "gpt-4o" | "claude-3.5-sonnet" | "claude-3.7-sonnet";
       visibility: "public" | "private";
       universe: string;
       topic_expertise: string;
@@ -150,30 +165,21 @@ export async function POST(request: Request) {
 
     console.log('Agent created successfully:', agent)
 
-    // Handle file uploads if any
-    if (validatedData.files && validatedData.files.length > 0) {
-      const { data: resources, error: resourceError } = await supabase
-        .from('agent_resources')
-        .insert(
-          validatedData.files.map(file => ({
-            agent_id: agent.id,
-            name: file.name,
-            size: file.size,
-            type: file.type,
-            user_id: user.id
-          }))
-        )
-        .select()
+    // Upload and ingest resource files (if provided)
+    if (resourceFiles.length > 0 || rejectedFiles.length > 0) {
+      const results = [] as Array<{ name: string; success: boolean; error?: string }>
 
-      if (resourceError) {
-        console.error('Resource error:', resourceError)
-        return NextResponse.json({
-          agent,
-          resourceError: 'Failed to create some resources'
-        })
+      for (const file of resourceFiles) {
+        const res = await uploadAgentResource(file, agent.id, user.id)
+        results.push({ name: file.name, ...res })
       }
 
-      return NextResponse.json({ agent, resources })
+      // Include rejected files as failed results for clarity
+      for (const rej of rejectedFiles) {
+        results.push({ name: rej.name, success: false, error: rej.reason })
+      }
+
+      return NextResponse.json({ agent, resourceIngestion: results })
     }
 
     return NextResponse.json({ agent })

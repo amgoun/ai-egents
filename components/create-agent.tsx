@@ -48,7 +48,7 @@ const formSchema = z.object({
   modelProvider: z.enum(["OpenAI", "Anthropic"], {
     required_error: "Please select an AI model provider.",
   }),
-  modelVersion: z.enum(["gpt-4", "gpt-4.1", "claude-3.5-sonnet", "claude-3.7-sonnet"], {
+  modelVersion: z.enum(["gpt-4o-mini", "gpt-4o", "claude-3.5-sonnet", "claude-3.7-sonnet"], {
     required_error: "Please select a model version.",
   }),
   visibility: z.enum(["public", "private"], {
@@ -80,10 +80,12 @@ interface UploadedFile {
 
 interface CreateAgentProps {
   onAgentCreated?: (agent: any) => void
+  onAgentUpdated?: (agent: any) => void
   onCancel?: () => void
+  editingAgent?: Agent | null
 }
 
-export default function CreateAgent({ onAgentCreated, onCancel }: CreateAgentProps) {
+export default function CreateAgent({ onAgentCreated, onAgentUpdated, onCancel, editingAgent }: CreateAgentProps) {
   const router = useRouter()
   const [activeStep, setActiveStep] = useState("basic")
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
@@ -96,15 +98,17 @@ export default function CreateAgent({ onAgentCreated, onCancel }: CreateAgentPro
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      name: "",
-      modelProvider: "OpenAI",
-      modelVersion: "gpt-4",
-      visibility: "public",
-      universe: "",
-      topicExpertise: "",
-      systemPrompt: "You are a helpful AI assistant.",
-      useAiAvatar: true,
+      name: editingAgent?.name || "",
+      modelProvider: editingAgent?.modelProvider || "OpenAI",
+      modelVersion: editingAgent?.modelVersion || "gpt-4o-mini",
+      visibility: editingAgent?.visibility || "public",
+      universe: editingAgent?.universe || "",
+      topicExpertise: editingAgent?.topicExpertise || "",
+      systemPrompt: editingAgent?.systemPrompt || "You are a helpful AI assistant.",
+      useAiAvatar: false, // Default to upload image instead of AI generation
       imageDescription: "",
+      avatarUrl: editingAgent?.avatarUrl || "",
+      avatarPath: editingAgent?.avatarPath || "",
     },
   })
 
@@ -296,39 +300,66 @@ export default function CreateAgent({ onAgentCreated, onCancel }: CreateAgentPro
 
       let response: Response
 
-      // Create FormData for file upload
-      const formData = new FormData()
-      
-      // Add avatar image if it exists and not using AI avatar
-      if (!data.useAiAvatar && data.avatarImage instanceof File) {
-        formData.append('avatarImage', data.avatarImage)
-      }
-      
-      // Add the rest of the form data as JSON
-      formData.append('data', JSON.stringify({
-        name: data.name,
-        modelProvider: data.modelProvider,
-        modelVersion: data.modelVersion,
-        visibility: data.visibility,
-        universe: data.universe,
-        topicExpertise: data.topicExpertise,
-        systemPrompt: data.systemPrompt,
-        useAiAvatar: data.useAiAvatar,
-        // Include AI-generated avatar data if present
-        avatarUrl: data.useAiAvatar ? data.avatarUrl : undefined,
-        avatarPath: data.useAiAvatar ? data.avatarPath : undefined,
-        imageDescription: data.useAiAvatar ? data.imageDescription : undefined,
-        files: uploadedFiles.map(f => ({
-          name: f.name,
-          size: f.size,
-          type: f.type
+      if (editingAgent) {
+        // Update existing agent
+        response = await fetch(`/api/agents/${editingAgent.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: data.name,
+            description: data.universe, // Using universe as description for now
+            modelProvider: data.modelProvider,
+            modelVersion: data.modelVersion,
+            visibility: data.visibility,
+            universe: data.universe,
+            topicExpertise: data.topicExpertise,
+            systemPrompt: data.systemPrompt,
+          }),
+        })
+      } else {
+        // Create new agent
+        const formData = new FormData()
+        
+        // Add avatar image if it exists and not using AI avatar
+        if (!data.useAiAvatar && data.avatarImage instanceof File) {
+          formData.append('avatarImage', data.avatarImage)
+        }
+        
+        // Attach resource files for ingestion
+        uploadedFiles.forEach((f, index) => {
+          if (f.file) {
+            formData.append('resourceFiles', f.file, f.name)
+          }
+        })
+
+        // Add the rest of the form data as JSON (metadata still useful)
+        formData.append('data', JSON.stringify({
+          name: data.name,
+          modelProvider: data.modelProvider,
+          modelVersion: data.modelVersion,
+          visibility: data.visibility,
+          universe: data.universe,
+          topicExpertise: data.topicExpertise,
+          systemPrompt: data.systemPrompt,
+          useAiAvatar: data.useAiAvatar,
+          // Include AI-generated avatar data if present
+          avatarUrl: data.useAiAvatar ? data.avatarUrl : undefined,
+          avatarPath: data.useAiAvatar ? data.avatarPath : undefined,
+          imageDescription: data.useAiAvatar ? data.imageDescription : undefined,
+          files: uploadedFiles.map(f => ({
+            name: f.name,
+            size: f.size,
+            type: f.type
+          }))
         }))
-      }))
-      
-      response = await fetch('/api/agents/create', {
-        method: 'POST',
-        body: formData,
-      })
+        
+        response = await fetch('/api/agents/create', {
+          method: 'POST',
+          body: formData,
+        })
+      }
 
       const result = await response.json()
       console.log('Server response:', result)
@@ -338,24 +369,26 @@ export default function CreateAgent({ onAgentCreated, onCancel }: CreateAgentPro
           setIsAuthError(true)
           return
         }
-        throw new Error(result.error || 'Failed to create agent')
+        throw new Error(result.error || `Failed to ${editingAgent ? 'update' : 'create'} agent`)
       }
 
       toast({
         title: "Success!",
-        description: "Agent created successfully",
+        description: `Agent ${editingAgent ? 'updated' : 'created'} successfully`,
         variant: "default",
       })
 
-      // Pass the created agent data to the callback
-      if (onAgentCreated) {
+      // Pass the agent data to the appropriate callback
+      if (editingAgent && onAgentUpdated) {
+        onAgentUpdated(result.agent)
+      } else if (onAgentCreated) {
         onAgentCreated(result.agent)
       }
     } catch (error) {
-      console.error('Error creating agent:', error)
+      console.error(`Error ${editingAgent ? 'updating' : 'creating'} agent:`, error)
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to create agent",
+        description: error instanceof Error ? error.message : `Failed to ${editingAgent ? 'update' : 'create'} agent`,
         variant: "destructive",
       })
     } finally {
@@ -368,13 +401,13 @@ export default function CreateAgent({ onAgentCreated, onCancel }: CreateAgentPro
     switch (provider) {
       case "OpenAI":
         return [
-          { value: "gpt-4", label: "GPT-4" },
-          { value: "gpt-4.1", label: "GPT-4.1" }
+          { value: "gpt-4o-mini", label: "GPT-4o Mini", description: "Best value - 1x tokens" },
+          { value: "gpt-4o", label: "GPT-4o", description: "Premium quality - 3x tokens" }
         ]
       case "Anthropic":
         return [
-          { value: "claude-3.5-sonnet", label: "Claude 3.5 Sonnet" },
-          { value: "claude-3.7-sonnet", label: "Claude 3.7 Sonnet" }
+          { value: "claude-3.5-sonnet", label: "Claude 3.5 Sonnet", description: "Balanced - 2x tokens" },
+          { value: "claude-3.7-sonnet", label: "Claude 3.7 Sonnet", description: "Latest - 2.5x tokens" }
         ]
       default:
         return []
@@ -424,13 +457,13 @@ export default function CreateAgent({ onAgentCreated, onCancel }: CreateAgentPro
           <div className="max-w-md mx-auto lg:mx-0">
             <div className="mb-6 lg:mb-8">
               <Badge variant="secondary" className="mb-4 bg-yellow-100 text-yellow-800">
-                AGENT CREATOR
+                {editingAgent ? 'AGENT EDITOR' : 'AGENT CREATOR'}
               </Badge>
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2">
-                Create your own AI Agent in a
+                {editingAgent ? 'Edit your AI Agent' : 'Create your own AI Agent in a'}
               </h1>
               <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-6 lg:mb-8">
-                Few easy steps!
+                {editingAgent ? 'Update agent details' : 'Few easy steps!'}
               </h2>
             </div>
 
@@ -509,13 +542,16 @@ export default function CreateAgent({ onAgentCreated, onCancel }: CreateAgentPro
                       <SelectContent>
                         {modelVersions.map(version => (
                           <SelectItem key={version.value} value={version.value}>
-                            {version.label}
+                            <div className="flex flex-col">
+                              <span className="font-medium">{version.label}</span>
+                              <span className="text-xs text-muted-foreground">{version.description}</span>
+                            </div>
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                     <FormDescription>
-                      Select the specific model version for {modelProvider}
+                      Different models cost different amounts of tokens. GPT-4o Mini is the most efficient.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -714,12 +750,12 @@ export default function CreateAgent({ onAgentCreated, onCancel }: CreateAgentPro
                 {isSubmitting ? (
                   <>
                     <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                    Creating Agent...
+                    {editingAgent ? 'Updating Agent...' : 'Creating Agent...'}
                   </>
                 ) : (
                   <>
                     <Save className="w-4 h-4 mr-2" />
-                    Save Agent
+                    {editingAgent ? 'Update Agent' : 'Save Agent'}
                   </>
                 )}
               </Button>

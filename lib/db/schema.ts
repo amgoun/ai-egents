@@ -8,7 +8,7 @@ export const agentVisibilityEnum = pgEnum('agent_visibility', ['public', 'privat
 export const roleEnum = pgEnum('role', ['user', 'admin'])
 export const resourceStatusEnum = pgEnum('resource_status', ['pending', 'processed', 'failed'])
 export const modelProviderEnum = pgEnum('model_provider', ['OpenAI', 'Anthropic'])
-export const modelVersionEnum = pgEnum('model_version', ['gpt-4', 'gpt-4.1', 'claude-3.5-sonnet', 'claude-3.7-sonnet'])
+export const modelVersionEnum = pgEnum('model_version', ['gpt-4o-mini', 'gpt-4o', 'claude-3.5-sonnet', 'claude-3.7-sonnet'])
 export const resourceTypeEnum = pgEnum('resource_type', ['avatar', 'training_data', 'other'])
 
 // Enable pgvector extension
@@ -136,7 +136,7 @@ export const agents = pgTable("agents", {
   
   // AI Model Configuration
   modelProvider: modelProviderEnum("model_provider").default('OpenAI').notNull(),
-  modelVersion: modelVersionEnum("model_version").notNull(), // e.g., 'gpt-4', 'claude-3.5-sonnet'
+  modelVersion: modelVersionEnum("model_version").notNull(), // e.g., 'gpt-4o-mini', 'claude-3.5-sonnet'
   temperature: integer("temperature").default(70), // 0-100 scale for response randomness
   systemPrompt: text("system_prompt").notNull(),
   
@@ -185,8 +185,26 @@ export const usageLimits = pgTable("usage_limits", {
   userId: text("user_id").references(() => users.id).notNull(),
   messageCount: integer("message_count").default(0).notNull(),
   agentCount: integer("agent_count").default(0).notNull(),
+  tokensUsed: integer("tokens_used").default(0).notNull(), // Track token usage
+  tokensLimit: integer("tokens_limit").default(250000).notNull(), // Default 250K tokens for free users
+  planType: text("plan_type").default('free').notNull(), // 'free', 'pro'
+  avatarsGenerated: integer("avatars_generated").default(0).notNull(), // Track AI avatar generations
+  avatarsLimit: integer("avatars_limit").default(5).notNull(), // Default 5 avatars for free, 50 for pro
   periodStart: timestamp("period_start").notNull(),
   periodEnd: timestamp("period_end").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+})
+
+// Token Usage Tracking - detailed log of each API call
+export const tokenUsage = pgTable("token_usage", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").references(() => users.id).notNull(),
+  sessionId: integer("session_id").references(() => chatSessions.id),
+  agentId: integer("agent_id").references(() => agents.id),
+  messageId: integer("message_id").references(() => chatMessages.id),
+  tokensUsed: integer("tokens_used").notNull(),
+  modelUsed: text("model_used").notNull(), // gpt-4o-mini, claude-3.5-sonnet, etc.
+  operationType: text("operation_type").notNull(), // 'chat', 'agent_creation', 'avatar_generation'
   createdAt: timestamp("created_at").defaultNow().notNull(),
 })
 
@@ -196,6 +214,7 @@ export const userRelations = relations(users, ({ many }) => ({
   agents: many(agents),
   chatSessions: many(chatSessions),
   usageLimits: many(usageLimits),
+  tokenUsage: many(tokenUsage),
 }))
 
 export const agentRelations = relations(agents, ({ one, many }) => ({
@@ -229,6 +248,26 @@ export const chatSessionRelations = relations(chatSessions, ({ one, many }) => (
     references: [agents.id],
   }),
   messages: many(chatMessages),
+  tokenUsage: many(tokenUsage),
+}))
+
+export const tokenUsageRelations = relations(tokenUsage, ({ one }) => ({
+  user: one(users, {
+    fields: [tokenUsage.userId],
+    references: [users.id],
+  }),
+  session: one(chatSessions, {
+    fields: [tokenUsage.sessionId],
+    references: [chatSessions.id],
+  }),
+  agent: one(agents, {
+    fields: [tokenUsage.agentId],
+    references: [agents.id],
+  }),
+  message: one(chatMessages, {
+    fields: [tokenUsage.messageId],
+    references: [chatMessages.id],
+  }),
 }))
 
 // Export types
@@ -240,3 +279,4 @@ export type AgentTrainingData = typeof agentTrainingData.$inferSelect
 export type ChatSession = typeof chatSessions.$inferSelect
 export type ChatMessage = typeof chatMessages.$inferSelect
 export type UsageLimit = typeof usageLimits.$inferSelect
+export type TokenUsage = typeof tokenUsage.$inferSelect

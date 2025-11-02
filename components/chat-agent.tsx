@@ -120,6 +120,12 @@ export default function ChatAgent({
         }),
       })
 
+      if (response.status === 401) {
+        // Not authenticated → show modal and stop
+        setAuthError(true)
+        return
+      }
+
       if (!response.ok) {
         throw new Error('Failed to send message')
       }

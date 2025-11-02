@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
-import BrowseAgents from "@/components/browse-agent"
+import BrowseAgentPage from "@/components/browse-agent-page"
 import type { Agent } from "@/lib/db/schema"
 
 export default async function BrowsePage() {
@@ -32,13 +32,13 @@ export default async function BrowsePage() {
 
   if (error) {
     console.error('Error fetching agents:', error)
-    return <BrowseAgents initialAgents={[]} initialSession={session} />
+    return <BrowseAgentPage initialAgents={[]} initialSession={session} />
   }
 
   // Ensure we have an array
   if (!Array.isArray(rawAgents)) {
     console.warn('rawAgents is not an array, using empty array')
-    return <BrowseAgents initialAgents={[]} initialSession={session} />
+    return <BrowseAgentPage initialAgents={[]} initialSession={session} />
   }
 
   // Transform snake_case to camelCase for frontend
@@ -68,5 +68,5 @@ export default async function BrowsePage() {
   console.log('Agents count:', agents.length)
   console.log('BrowsePage: Rendering component with agents and session')
 
-  return <BrowseAgents initialAgents={agents} initialSession={session} />
+  return <BrowseAgentPage initialAgents={agents} initialSession={session} />
 } 

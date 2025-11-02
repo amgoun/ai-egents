@@ -55,27 +55,44 @@ export default function Home() {
         setSession(userSession)
 
         // Fetch agents that are either public OR belong to the current user
-        const { data: agents, error } = await supabase
+        const query = supabase
           .from('agents')
           .select(`
             id,
             name,
             description,
             avatar_url,
+            avatar_path,
+            avatar_resource_id,
+            image_description,
             visibility,
             universe,
             topic_expertise,
             creator_id,
             model_provider,
             model_version,
-            created_at
+            temperature,
+            system_prompt,
+            created_at,
+            updated_at,
+            is_verified,
+            metadata
           `)
-          .or(`visibility.eq.public,creator_id.eq.${user?.id}`)
-          .order('created_at', { ascending: false })
+
+        // Only include creator filter if authenticated; otherwise fetch public only
+        const { data: agents, error } = user?.id
+          ? await query.or(`visibility.eq.public,creator_id.eq.${user.id}`).order('created_at', { ascending: false })
+          : await query.eq('visibility', 'public').order('created_at', { ascending: false })
 
         if (error) {
-          console.error('Error fetching agents:', error)
-          throw error // Add this to see the full error
+          console.error('Error fetching agents:', {
+            message: (error as any)?.message,
+            details: (error as any)?.details,
+            hint: (error as any)?.hint,
+            code: (error as any)?.code,
+          })
+          // Gracefully handle by showing empty state
+          setAgents([])
         }
 
         if (agents) {
@@ -154,28 +171,56 @@ export default function Home() {
     setActiveTab("browse")
   }
 
+  const [editingAgent, setEditingAgent] = useState<Agent | null>(null)
+
   const handleEditAgent = (agent: Agent) => {
+    setEditingAgent(agent)
     setActiveTab("create")
-    // You could pass the agent data to CreateAgent component for editing
   }
 
   const handleAgentCreated = (newAgent: Agent) => {
     // Add the new agent to the list immediately
     setAgents(current => [newAgent, ...current])
-    // Switch to browse tab
+    // Clear editing state and switch to browse tab
+    setEditingAgent(null)
     setActiveTab("browse")
+  }
+
+  const handleAgentUpdated = (updatedAgent: Agent) => {
+    // Update the agent in the list
+    setAgents(current => 
+      current.map(agent => 
+        agent.id === updatedAgent.id ? updatedAgent : agent
+      )
+    )
+    // Clear editing state and switch to browse tab
+    setEditingAgent(null)
+    setActiveTab("browse")
+  }
+
+  const handleAgentDeleted = (agentId: number) => {
+    // Remove the agent from the list
+    setAgents(current => current.filter(agent => agent.id !== agentId))
   }
 
   const renderContent = () => {
     switch (activeTab) {
       case "create":
-        return <CreateAgent onAgentCreated={handleAgentCreated} />
+        return (
+          <CreateAgent 
+            onAgentCreated={handleAgentCreated} 
+            onAgentUpdated={handleAgentUpdated}
+            editingAgent={editingAgent}
+          />
+        )
       case "browse":
         return (
           <BrowseAgent 
             agents={agents} 
             currentUserId={currentUserId} 
             onAgentSelect={handleAgentSelect}
+            onAgentEdit={handleEditAgent}
+            onAgentDeleted={handleAgentDeleted}
             isLoading={isLoading}
           />
         )
@@ -189,7 +234,13 @@ export default function Home() {
           />
         )
       default:
-        return <CreateAgent onAgentCreated={handleAgentCreated} />
+        return (
+          <CreateAgent 
+            onAgentCreated={handleAgentCreated} 
+            onAgentUpdated={handleAgentUpdated}
+            editingAgent={editingAgent}
+          />
+        )
     }
   }
 

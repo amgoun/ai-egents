@@ -102,6 +102,19 @@ export default function AgentAvatar({ form }: AgentAvatarProps) {
       const data = await response.json()
       console.log('Avatar generation response:', data)
       
+      // Handle insufficient tokens error
+      if (response.status === 402) {
+        toast.error('Insufficient Tokens', {
+          description: data.message || 'You need more tokens to generate an avatar. Upgrade to Pro!',
+          duration: 5000
+        })
+        return
+      }
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to generate avatar')
+      }
+      
       if (!data.imageUrl || !data.imagePath) {
         throw new Error('Invalid response from avatar generation')
       }
@@ -116,14 +129,22 @@ export default function AgentAvatar({ form }: AgentAvatarProps) {
       // Reset the description field
       form.setValue('imageDescription', '')
       
-      // Show success message
-      toast.success('Avatar generated successfully!')
+      // Show success message with token usage
+      const tokensMessage = data.tokensUsed 
+        ? `Used ${data.tokensUsed.toLocaleString()} tokens. ${data.remainingTokens?.toLocaleString() || '?'} remaining.`
+        : ''
+      
+      toast.success('Avatar generated successfully!', {
+        description: tokensMessage
+      })
       
       console.log('Updated form values:', {
         preview: data.imageUrl,
         formUrl: form.getValues('avatarUrl'),
         formPath: form.getValues('avatarPath'),
-        useAiAvatar: form.getValues('useAiAvatar')
+        useAiAvatar: form.getValues('useAiAvatar'),
+        tokensUsed: data.tokensUsed,
+        tokensRemaining: data.remainingTokens
       })
     } catch (error) {
       console.error('Avatar generation error:', error)
