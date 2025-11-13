@@ -23,13 +23,19 @@ Integrate LemonSqueezy for Pro plan payments ($30/month) that gives users:
 
 1. Go to Settings → API
 2. Copy your **API Key**
-3. Add to `.env.local`:
+3. Get your **Store ID** (this is your store name/slug, e.g., "my-store")
+4. Get your **Variant ID** (from the product page, e.g., "123456")
+5. Add to `.env.local`:
    ```env
    LEMONSQUEEZY_API_KEY=your_api_key_here
-   LEMONSQUEEZY_STORE_ID=your_store_id
-   LEMONSQUEEZY_PRODUCT_ID=your_product_id
+   LEMONSQUEEZY_STORE_ID=your_store_name
+   LEMONSQUEEZY_VARIANT_ID=your_variant_id
    LEMONSQUEEZY_WEBHOOK_SECRET=your_webhook_secret
    ```
+   
+   **Important:**
+   - `LEMONSQUEEZY_STORE_ID` = Your store name/slug (e.g., "my-store")
+   - `LEMONSQUEEZY_VARIANT_ID` = The variant ID from your product (not product ID)
 
 ---
 
@@ -58,8 +64,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Create LemonSqueezy checkout
-    const checkoutUrl = `https://your-store.lemonsqueezy.com/checkout/buy/${process.env.LEMONSQUEEZY_PRODUCT_ID}?checkout[email]=${user.email}&checkout[custom][user_id]=${user.id}`
+    // Validate required environment variables
+    const storeId = process.env.LEMONSQUEEZY_STORE_ID
+    const variantId = process.env.LEMONSQUEEZY_VARIANT_ID
+    
+    if (!storeId || !variantId) {
+      console.error('Missing LemonSqueezy configuration')
+      return NextResponse.json({ 
+        error: 'Payment system not configured' 
+      }, { status: 500 })
+    }
+
+    // Create LemonSqueezy checkout URL
+    const checkoutUrl = `https://${storeId}.lemonsqueezy.com/checkout/buy/${variantId}?checkout[email]=${encodeURIComponent(user.email || '')}&checkout[custom][user_id]=${user.id}`
 
     return NextResponse.json({ checkoutUrl })
   } catch (error) {
@@ -214,21 +231,26 @@ const handleUpgrade = async () => {
 
 ## Token Cost Structure
 
-| Action | Token Cost |
-|--------|-----------|
-| Chat message (avg) | 500-2000 |
-| Avatar generation | 5,000 |
-| Document upload | 1,000-5,000 |
+| Action | Token Cost | Notes |
+|--------|-----------|-------|
+| Chat (GPT-4o Mini) | 500-2000 | 1x multiplier (base rate) |
+| Chat (GPT-4o) | 1500-6000 | 3x multiplier (premium) |
+| Chat (Claude 3.5) | 1000-4000 | 2x multiplier |
+| Chat (Claude 3.7) | 1250-5000 | 2.5x multiplier |
+| Avatar generation | 10,000 | Limited: 5 free, 50 pro/month |
+| Document upload | 1,000-5,000 | Varies by size |
 
 ### Free Plan:
 - 250,000 tokens/month
-- ~50 avatar generations OR
-- ~125 chat messages
+- 5 AI avatar generations/month
+- ~250 chat messages (GPT-4o Mini) OR ~80 (GPT-4o)
+- Unlimited custom avatar uploads
 
 ### Pro Plan ($30/month):
 - 10,000,000 tokens/month
-- ~2,000 avatar generations OR
-- ~5,000 chat messages
+- 50 AI avatar generations/month
+- ~5,000 chat messages (GPT-4o Mini) OR ~1,600 (GPT-4o)
+- Unlimited custom avatar uploads
 - Resets monthly
 
 ---
@@ -238,8 +260,8 @@ const handleUpgrade = async () => {
 ```env
 # LemonSqueezy
 LEMONSQUEEZY_API_KEY=lemon_api_xxx
-LEMONSQUEEZY_STORE_ID=12345
-LEMONSQUEEZY_PRODUCT_ID=67890
+LEMONSQUEEZY_STORE_ID=your-store-name
+LEMONSQUEEZY_VARIANT_ID=123456
 LEMONSQUEEZY_WEBHOOK_SECRET=whsec_xxx
 
 # Existing

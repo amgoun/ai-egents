@@ -35,13 +35,26 @@ export default function TokenLimitWarning({ userId, onUpgrade }: TokenLimitWarni
     return null
   }
 
-  const handleUpgrade = () => {
+  const handleUpgrade = async () => {
     if (onUpgrade) {
       onUpgrade()
     } else {
-      // Default upgrade action
-      console.log('Upgrade to Pro clicked')
-      // You can add your upgrade logic here
+      // Default upgrade action - redirect to LemonSqueezy checkout
+      try {
+        const response = await fetch('/api/lemonsqueezy/checkout', {
+          method: 'POST'
+        })
+        
+        if (!response.ok) {
+          throw new Error('Failed to create checkout')
+        }
+        
+        const { checkoutUrl } = await response.json()
+        window.location.href = checkoutUrl
+      } catch (error) {
+        console.error('Upgrade error:', error)
+        alert('Failed to start checkout. Please try again.')
+      }
     }
   }
 

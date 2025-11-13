@@ -39,6 +39,7 @@ export default function AgentAvatar({ form }: AgentAvatarProps) {
   const [isGeneratingAvatar, setIsGeneratingAvatar] = useState(false)
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const avatarInputRef = useRef<HTMLInputElement>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
 
   // Add useEffect to handle initial avatar
   useEffect(() => {
@@ -158,8 +159,19 @@ export default function AgentAvatar({ form }: AgentAvatarProps) {
 
   return (
     <Card className="h-full relative overflow-hidden bg-gradient-to-br from-purple-600 via-pink-600 to-blue-600 border-0">
-      <div className="absolute inset-0 bg-black/20" />
-      <div className="relative h-full flex flex-col min-h-[350px]">
+      {/* Video Background */}
+      <video
+        ref={videoRef}
+        autoPlay
+        loop
+        muted
+        playsInline
+        className="absolute inset-0 w-full h-full object-cover z-0"
+      >
+        <source src="/ai.mp4" type="video/mp4" />
+      </video>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-10" />
+      <div className="relative h-full flex flex-col min-h-[350px] z-20">
         {/* Title and Generate Button */}
         <div className="flex items-center justify-between p-4">
           <h2 className="text-lg font-semibold text-white">Agent Avatar</h2>
@@ -195,7 +207,7 @@ export default function AgentAvatar({ form }: AgentAvatarProps) {
             transition={{ duration: 0.5 }}
             className="text-center"
           >
-            <div className="w-32 h-32 sm:w-48 sm:h-48 lg:w-64 lg:h-64 mx-auto mb-4 rounded-lg overflow-hidden">
+            <div className="w-24 h-24 sm:w-32 sm:h-32 lg:w-48 lg:h-48 mx-auto mb-4 rounded-lg overflow-hidden">
               {avatarPreview ? (
                 <>
                   <img 
@@ -222,7 +234,7 @@ export default function AgentAvatar({ form }: AgentAvatarProps) {
                   <div className="text-center mt-2 text-sm text-white">Agent Avatar Preview</div>
                 </>
               ) : (
-                <div className="w-full h-full bg-gradient-to-br from-pink-400 to-purple-600 flex items-center justify-center flex-col">
+                <div className="w-full h-full bg-gradient-to-br from-pink-400 to-purple-600 flex items-center justify-center flex-col rounded-full">
                   <span className="text-3xl sm:text-4xl lg:text-6xl mb-2">🤖</span>
                   <div className="text-white text-sm">Agent Avatar Preview</div>
                 </div>

@@ -46,10 +46,27 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
     { id: "chat", label: "Chat Agent", icon: MessageCircle },
   ]
 
-  const handleUpgrade = () => {
-    // Handle upgrade flow - could open a modal, redirect to payment page, etc.
-    console.log('Upgrade to Pro clicked')
-    // You can add your upgrade logic here
+  const handleUpgrade = async () => {
+    try {
+      console.log('Starting LemonSqueezy checkout...')
+      
+      const response = await fetch('/api/lemonsqueezy/checkout', {
+        method: 'POST'
+      })
+      
+      if (!response.ok) {
+        throw new Error('Failed to create checkout')
+      }
+      
+      const { checkoutUrl } = await response.json()
+      
+      // Redirect to LemonSqueezy checkout
+      window.location.href = checkoutUrl
+    } catch (error) {
+      console.error('Upgrade error:', error)
+      // You can add a toast notification here if you have one
+      alert('Failed to start checkout. Please try again.')
+    }
   }
 
   return (
