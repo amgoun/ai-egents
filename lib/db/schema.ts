@@ -163,9 +163,12 @@ export const agentResourceRelations = relations(agentResources, ({ one }) => ({
 // Chat Sessions
 export const chatSessions = pgTable("chat_sessions", {
   id: serial("id").primaryKey(),
-  userId: text("user_id").references(() => users.id).notNull(),
+  // Allow userId to be null for guest/embedded sessions
+  userId: text("user_id").references(() => users.id),
   agentId: integer("agent_id").references(() => agents.id).notNull(),
-  title: text("title"), // Generated from first message or user input
+  title: text("title"),
+  // Add visitor_id for tracking anonymous users
+  visitorId: text("visitor_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 })
