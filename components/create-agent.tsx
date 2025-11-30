@@ -456,7 +456,7 @@ export default function CreateAgent({ onAgentCreated, onAgentUpdated, onCancel, 
         <div className="w-full lg:w-1/2 p-4 sm:p-6 lg:p-8 overflow-y-auto">
           <div className="max-w-md mx-auto lg:mx-0">
             <div className="mb-6 lg:mb-8">
-              <Badge variant="secondary" className="mb-4 bg-yellow-100 text-yellow-800">
+              <Badge variant="secondary" className="mb-4 bg-blue-600/20 text-blue-600">
                 {editingAgent ? 'AGENT EDITOR' : 'AGENT CREATOR'}
               </Badge>
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2">
@@ -744,7 +744,7 @@ export default function CreateAgent({ onAgentCreated, onAgentUpdated, onCancel, 
 
               <Button 
                 type="submit" 
-                className="w-full bg-yellow-400 hover:bg-yellow-500 text-black font-medium py-3"
+                className="w-full bg-blue-600 hover:bg-blue-600/90 text-white font-medium py-3"
                 disabled={isSubmitting}
               >
                 {isSubmitting ? (

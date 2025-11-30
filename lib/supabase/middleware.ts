@@ -33,16 +33,17 @@ export async function updateSession(request: NextRequest) {
   )
 
   // Refresh the auth token
+  // getUser() validates the token and refreshes it if necessary
   const {
-    data: { session },
-  } = await supabase.auth.getSession()
+    data: { user },
+  } = await supabase.auth.getUser()
 
   // Only protect chat and create agent API routes
   const isProtectedRoute = 
     request.nextUrl.pathname.startsWith('/api/chat') ||
     request.nextUrl.pathname.startsWith('/api/agents/create')
 
-  if (isProtectedRoute && !session) {
+  if (isProtectedRoute && !user) {
     return NextResponse.json(
       { error: 'Authentication required' },
       { status: 401 }

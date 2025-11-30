@@ -38,7 +38,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   })),
   setRecentChats: (chats) => set({ recentChats: chats }),
   setCurrentSession: (sessionId) => set({ currentSessionId: sessionId }),
-  setSelectedAgent: (agent) => set({ selectedAgent: agent }),
+  setSelectedAgent: (agent) => set((state) => {
+    // Only clear messages if the agent is actually changing
+    if (state.selectedAgent?.id !== agent?.id) {
+      return { 
+        selectedAgent: agent, 
+        messages: [], 
+        currentSessionId: null 
+      }
+    }
+    return { selectedAgent: agent }
+  }),
   setLoading: (loading) => set({ isLoading: loading }),
   setLoadingChats: (loading) => set({ isLoadingChats: loading }),
   setAuthError: (error) => set({ isAuthError: error }),

@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import { useState, useRef, useEffect } from "react"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
@@ -158,27 +159,22 @@ export default function AgentAvatar({ form }: AgentAvatarProps) {
   }
 
   return (
-    <Card className="h-full relative overflow-hidden bg-gradient-to-br from-purple-600 via-pink-600 to-blue-600 border-0">
-      {/* Video Background */}
-      <video
-        ref={videoRef}
-        autoPlay
-        loop
-        muted
-        playsInline
-        className="absolute inset-0 w-full h-full object-cover z-0"
-      >
-        <source src="/ai.mp4" type="video/mp4" />
-      </video>
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-10" />
+    <Card className="h-full relative overflow-hidden bg-gradient-to-br from-purple-600 via-pink-600 to-blue-600 border-0 p-5">
+     
+      <Image
+        src="/bg-chat.png"
+        alt="AI Background"
+        fill
+        className="absolute inset-0   w-full h-full object-cover z-0"
+      />
       <div className="relative h-full flex flex-col min-h-[350px] z-20">
         {/* Title and Generate Button */}
         <div className="flex items-center justify-between p-4">
-          <h2 className="text-lg font-semibold text-white">Agent Avatar</h2>
+         
           {form.watch('useAiAvatar') && (
             <Button 
               size="sm" 
-              className="bg-yellow-400 hover:bg-yellow-500 text-black font-medium text-xs sm:text-sm"
+              className="bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs sm:text-sm"
               onClick={handleGenerateAvatar}
               disabled={isGeneratingAvatar || !form.watch('imageDescription')}
             >
@@ -207,7 +203,7 @@ export default function AgentAvatar({ form }: AgentAvatarProps) {
             transition={{ duration: 0.5 }}
             className="text-center"
           >
-            <div className="w-24 h-24 sm:w-32 sm:h-32 lg:w-48 lg:h-48 mx-auto mb-4 rounded-lg overflow-hidden">
+            <div className="w-24 h-24 sm:w-32 sm:h-32 lg:w-48 lg:h-48 mx-auto mb-4 rounded-lg overflow-hidden translate-y-16">
               {avatarPreview ? (
                 <>
                   <img 
@@ -234,9 +230,9 @@ export default function AgentAvatar({ form }: AgentAvatarProps) {
                   <div className="text-center mt-2 text-sm text-white">Agent Avatar Preview</div>
                 </>
               ) : (
-                <div className="w-full h-full bg-gradient-to-br from-pink-400 to-purple-600 flex items-center justify-center flex-col rounded-full">
+                <div className="w-full h-full  flex items-center justify-center flex-col rounded-full">
                   <span className="text-3xl sm:text-4xl lg:text-6xl mb-2">🤖</span>
-                  <div className="text-white text-sm">Agent Avatar Preview</div>
+                  <div className="text-white text-sm"> Avatar Placeholder</div>
                 </div>
               )}
             </div>
@@ -244,10 +240,10 @@ export default function AgentAvatar({ form }: AgentAvatarProps) {
         </div>
 
         {/* Controls */}
-        <Card className="bg-white/90 backdrop-blur-sm">
+        <Card className="bg-white/90 dark:bg-black/90 backdrop-blur-sm">
           <div className="p-3 sm:p-4 space-y-4">
             <div className="flex items-center justify-between">
-              <Label htmlFor="avatar-type">Use AI Generated Avatar</Label>
+              <Label htmlFor="avatar-type" className="dark:text-white">Use AI Generated Avatar</Label>
               <FormField
                 control={form.control}
                 name="useAiAvatar"
@@ -281,15 +277,15 @@ export default function AgentAvatar({ form }: AgentAvatarProps) {
                   name="imageDescription"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Image Generation Description</FormLabel>
+                      <FormLabel className="dark:text-white">Image Generation Description</FormLabel>
                       <FormControl>
                         <Textarea
                           placeholder="Describe how you want your agent to look"
-                          className="w-full h-16 sm:h-20 resize-none border-0 bg-transparent text-sm"
+                          className="w-full h-16 sm:h-20 resize-none border-0 bg-transparent text-sm dark:text-white dark:placeholder:text-white/70"
                           {...field}
                         />
                       </FormControl>
-                      <FormDescription>
+                      <FormDescription className="dark:text-white/80">
                         Be specific about the style, colors, and characteristics you want
                       </FormDescription>
                       <FormMessage />
@@ -298,7 +294,7 @@ export default function AgentAvatar({ form }: AgentAvatarProps) {
                 />
               ) : (
                 <div className="space-y-2">
-                  <Label>Upload Avatar Image</Label>
+                  <Label className="dark:text-white">Upload Avatar Image</Label>
                   <input
                     ref={avatarInputRef}
                     type="file"
@@ -315,7 +311,7 @@ export default function AgentAvatar({ form }: AgentAvatarProps) {
                     <Upload className="w-4 h-4 mr-2" />
                     Choose Image
                   </Button>
-                  <FormDescription>
+                  <FormDescription className="dark:text-white/80">
                     Upload a square image (recommended size: 512x512px)
                   </FormDescription>
                 </div>

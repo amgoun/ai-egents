@@ -11,11 +11,17 @@ export interface ChatSession extends Omit<DbChatSession, 'agentId'> {
 export interface ChatInterfaceProps {
   agent: Agent
   messages: ChatMessage[]
+  chats: ChatSession[]
+  currentSessionId: number | null
   isLoading: boolean
   message: string
   session: any
   onMessageChange: (message: string) => void
   onSendMessage: () => void
+  onNewChat: () => void
+  onSelectChat: (sessionId: number) => void
+  onRenameChat: (sessionId: number, newTitle: string) => Promise<void>
+  onDeleteChat: (sessionId: number) => Promise<void>
   onKeyPress: (e: React.KeyboardEvent) => void
   onBack?: () => void
   onEdit?: (agent: Agent) => void

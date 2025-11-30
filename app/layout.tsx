@@ -8,7 +8,7 @@ import { ThemeProvider } from '@/components/theme-provider'
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "EQUILINK - AI Agent Platform",
+  title: "FlowBrain - AI Agent Platform",
   description: "Create, browse, and chat with AI agents",
     
 }

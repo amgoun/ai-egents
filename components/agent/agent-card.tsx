@@ -94,7 +94,7 @@ export default function AgentCard({ agent, isOwner, isDeleting = false, onEdit, 
   return (
     <Card className={`p-6 hover:shadow-lg transition-all cursor-pointer group relative ${isDeleting ? 'opacity-50' : ''}`}>
       {isOwner && (
-        <Badge className="absolute top-2 right-2 bg-yellow-500 text-black text-xs px-2 py-1">
+        <Badge className="absolute top-2 right-2 bg-blue-600 text-white text-xs px-2 py-1 hover:bg-blue-600/20 hover:text-blue-600 transition-colors">
           Your Agent
         </Badge>
       )}
@@ -169,34 +169,9 @@ export default function AgentCard({ agent, isOwner, isDeleting = false, onEdit, 
         {agent.name || 'Unnamed Agent'}
       </h3>
 
-      <p className="text-sm text-gray-600 dark:text-gray-400 text-center mb-3 line-clamp-2">
+      <p className="text-sm text-gray-600 dark:text-gray-400 text-center mb-4 line-clamp-2">
         {agent.description || agent.universe || 'No description available'}
       </p>
-
-      {/* Expertise tags */}
-      <div className="flex flex-wrap gap-1 justify-center mb-4">
-        {agent.topicExpertise ? (
-          <>
-            {agent.topicExpertise.split(',').slice(0, 2).map((skill, index) => (
-              <span
-                key={index}
-                className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-1 rounded-full"
-              >
-                {skill.trim()}
-              </span>
-            ))}
-            {agent.topicExpertise.split(',').length > 2 && (
-              <span className="text-xs text-gray-500 dark:text-gray-400">
-                +{agent.topicExpertise.split(',').length - 2} more
-              </span>
-            )}
-          </>
-        ) : (
-          <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-1 rounded-full">
-            General
-          </span>
-        )}
-      </div>
 
       {/* Action buttons */}
       <div className="flex gap-2 mt-auto">

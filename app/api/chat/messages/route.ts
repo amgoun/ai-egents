@@ -13,9 +13,9 @@ const messageQuerySchema = z.object({
 export async function GET(request: Request) {
   try {
     const supabase = await createClient()
-    const { data: { session } } = await supabase.auth.getSession()
+    const { data: { user } } = await supabase.auth.getUser()
     
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
@@ -55,15 +55,16 @@ export async function GET(request: Request) {
 
 const sendMessageSchema = z.object({
   message: z.string().min(1),
-  agentId: z.number()
+  agentId: z.number(),
+  sessionId: z.number().optional()
 })
 
 export async function POST(request: Request) {
   try {
     const supabase = await createClient()
-    const { data: { session } } = await supabase.auth.getSession()
+    const { data: { user } } = await supabase.auth.getUser()
     
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
@@ -92,7 +93,7 @@ export async function POST(request: Request) {
     const { data: existingUsage } = await supabase
       .from('usage_limits')
       .select('*')
-      .eq('user_id', session.user.id)
+      .eq('user_id', user.id)
       .gte('period_end', new Date().toISOString())
       .order('created_at', { ascending: false })
       .limit(1)
@@ -104,7 +105,7 @@ export async function POST(request: Request) {
       const { data: newUsage, error: createError } = await supabase
         .from('usage_limits')
         .insert({
-          user_id: session.user.id,
+          user_id: user.id,
           message_count: 0,
           agent_count: 0,
           tokens_used: 0,
@@ -176,20 +177,42 @@ export async function POST(request: Request) {
 
     // Get or create chat session
     let sessionId: number
-    const { data: existingSession } = await supabase
-      .from('chat_sessions')
-      .select('id')
-      .eq('user_id', session.user.id)
-      .eq('agent_id', validatedData.agentId)
-      .single()
 
-    if (existingSession) {
-      sessionId = existingSession.id
+    if (validatedData.sessionId) {
+      // Verify session belongs to user and agent
+      const { data: existingSession } = await supabase
+        .from('chat_sessions')
+        .select('id')
+        .eq('id', validatedData.sessionId)
+        .eq('user_id', user.id)
+        .eq('agent_id', validatedData.agentId)
+        .single()
+
+      if (existingSession) {
+        sessionId = existingSession.id
+      } else {
+        // Invalid session ID provided, fall back to creating new
+        const { data: newSession, error: sessionError } = await supabase
+          .from('chat_sessions')
+          .insert({
+            user_id: user.id,
+            agent_id: validatedData.agentId,
+            title: `Chat with Agent ${validatedData.agentId}`
+          })
+          .select()
+          .single()
+
+        if (sessionError || !newSession) {
+          throw new Error('Failed to create chat session')
+        }
+        sessionId = newSession.id
+      }
     } else {
+      // No session ID provided, create new session
       const { data: newSession, error: sessionError } = await supabase
         .from('chat_sessions')
         .insert({
-          user_id: session.user.id,
+          user_id: user.id,
           agent_id: validatedData.agentId,
           title: `Chat with Agent ${validatedData.agentId}`
         })
@@ -219,6 +242,8 @@ export async function POST(request: Request) {
 
     // Generate AI response using agent resources (RAG) when possible
     let aiResponse = ''
+    let generatedTitle = ''
+    
     try {
       // Retrieve relevant context from user/agent resources
       const similar = await searchSimilarContent(validatedData.message, agentConfig.id)
@@ -246,6 +271,38 @@ export async function POST(request: Request) {
           temperature: typeof agentConfig.temperature === 'number' ? Math.min(Math.max(agentConfig.temperature / 100, 0), 2) : 0.7
         })
         aiResponse = completion.choices[0]?.message?.content?.trim() || ''
+
+        // Generate a title for the chat if it's a new session or has a default title
+        // We check if the session title starts with "Chat with Agent" which is our default
+        const { data: currentSession } = await supabase
+          .from('chat_sessions')
+          .select('title')
+          .eq('id', sessionId)
+          .single()
+
+        if (currentSession?.title?.startsWith('Chat with Agent')) {
+          try {
+            const titleCompletion = await openai.chat.completions.create({
+              model: 'gpt-4o-mini',
+              messages: [
+                { role: 'system', content: 'Generate a very short, concise title (3-5 words max) for this conversation based on the user message. Do not use quotes. Be specific to the topic.' },
+                { role: 'user', content: validatedData.message }
+              ],
+              temperature: 0.7,
+              max_tokens: 15
+            })
+            generatedTitle = titleCompletion.choices[0]?.message?.content?.trim() || ''
+            
+            if (generatedTitle) {
+              await supabase
+                .from('chat_sessions')
+                .update({ title: generatedTitle })
+                .eq('id', sessionId)
+            }
+          } catch (titleError) {
+            console.error('Error generating title:', titleError)
+          }
+        }
       }
 
       // Fallback responses if OpenAI not available
@@ -303,7 +360,7 @@ export async function POST(request: Request) {
       supabase
         .from('token_usage')
         .insert({
-          user_id: session.user.id,
+          user_id: user.id,
           session_id: sessionId,
           agent_id: agent.id,
           message_id: userMessage.id,
@@ -316,7 +373,7 @@ export async function POST(request: Request) {
       supabase
         .from('token_usage')
         .insert({
-          user_id: session.user.id,
+          user_id: user.id,
           session_id: sessionId,
           agent_id: agent.id,
           message_id: aiMessage.id,
@@ -329,6 +386,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       sessionId,
       messages: [userMessage, aiMessage],
+      title: generatedTitle || undefined,
       tokensUsed: totalTokens,
       remainingTokens: usageLimit.tokensLimit - (usageLimit.tokensUsed + totalTokens),
       usagePercentage: ((usageLimit.tokensUsed + totalTokens) / usageLimit.tokensLimit) * 100

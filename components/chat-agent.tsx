@@ -55,13 +55,15 @@ export default function ChatAgent({
     }
   }, [initialSelectedAgent, setSelectedAgent])
 
+  // Determine if we are in a transition state
+  const isAgentSwitching = initialSelectedAgent && selectedAgent?.id !== initialSelectedAgent.id
+
   // Handle agent switching - clear messages and load correct session
   useEffect(() => {
     if (selectedAgent) {
       console.log('Agent changed, clearing messages and loading session for agent:', selectedAgent.id)
-      // Clear current messages
-      setMessages([])
-      setCurrentSession(null)
+      // Clear current messages - though store logic handles this, we ensure UI state is clean
+      // setMessages([]) -> Moved to store logic for atomic update
       
       // Find existing session for this agent or start fresh
       const existingChat = recentChats.find(chat => chat.agent.id === selectedAgent.id)
@@ -73,9 +75,10 @@ export default function ChatAgent({
         })
       } else {
         console.log('No existing session found for agent, starting fresh')
+        setCurrentSession(null) // Ensure session is cleared if no existing chat
       }
     }
-  }, [selectedAgent, recentChats, setMessages, setCurrentSession, fetchMessages])
+  }, [selectedAgent, recentChats, setCurrentSession, fetchMessages])
 
   // Auto-scroll on new messages
   useEffect(() => {
@@ -116,7 +119,8 @@ export default function ChatAgent({
         },
         body: JSON.stringify({ 
           message: messageToSend, 
-          agentId: selectedAgent.id 
+          agentId: selectedAgent.id,
+          sessionId: currentSessionId || undefined
         }),
       })
 
@@ -134,7 +138,16 @@ export default function ChatAgent({
 
       // Update session ID if needed
       if (data.sessionId) {
+        if (currentSessionId !== data.sessionId) {
+           // If we got a new session ID (and didn't have one before), refresh recent chats
+           fetchRecentChats()
+        }
         setCurrentSession(data.sessionId)
+      }
+      
+      // Refresh chats if title was updated
+      if (data.title) {
+        fetchRecentChats()
       }
 
       // Add new messages to existing ones
@@ -151,6 +164,29 @@ export default function ChatAgent({
       })
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleNewChat = () => {
+    setMessages([])
+    setCurrentSession(null)
+  }
+
+  const handleSwitchChat = async (sessionId: number) => {
+    try {
+        setLoading(true)
+        setCurrentSession(sessionId)
+        await fetchMessages(sessionId)
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    } catch (error) {
+        console.error('Error switching chat:', error)
+        toast({
+            title: 'Error',
+            description: 'Failed to load chat history',
+            variant: 'destructive'
+        })
+    } finally {
+        setLoading(false)
     }
   }
 
@@ -184,8 +220,68 @@ export default function ChatAgent({
     }
   }
 
+  const handleRenameChat = async (sessionId: number, newTitle: string) => {
+    try {
+      const response = await fetch(`/api/chat/sessions/${sessionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newTitle }),
+      })
+
+      if (!response.ok) throw new Error('Failed to rename chat')
+      
+      // Refresh chat list
+      await fetchRecentChats()
+      
+      toast({
+        description: 'Chat renamed successfully'
+      })
+    } catch (error) {
+      console.error('Error renaming chat:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to rename chat',
+        variant: 'destructive'
+      })
+    }
+  }
+
+  const handleDeleteChat = async (sessionId: number) => {
+    try {
+      const response = await fetch(`/api/chat/sessions/${sessionId}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) throw new Error('Failed to delete chat')
+
+      // If deleted current chat, clear messages
+      if (currentSessionId === sessionId) {
+        handleNewChat()
+      }
+      
+      // Refresh chat list
+      await fetchRecentChats()
+      
+      toast({
+        description: 'Chat deleted successfully'
+      })
+    } catch (error) {
+      console.error('Error deleting chat:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to delete chat',
+        variant: 'destructive'
+      })
+    }
+  }
+
+  // Filter chats for the current agent
+  const agentChats = selectedAgent 
+    ? recentChats.filter(chat => chat.agent.id === selectedAgent.id)
+    : []
+
   // Render recent chats or empty state if no agent selected
-  if (!selectedAgent) {
+  if (!selectedAgent && !initialSelectedAgent) {
     return <RecentChatsView 
       chats={recentChats}
       isLoading={isLoadingChats}
@@ -194,15 +290,26 @@ export default function ChatAgent({
     />
   }
 
+  // Force loading state or empty messages if we are switching agents
+  // This prevents showing the old agent's chat while the new one loads
+  const effectiveMessages = isAgentSwitching ? [] : messages
+  const effectiveIsLoading = isLoading || !!isAgentSwitching
+
   // Render chat interface
   return <ChatInterface 
-    agent={selectedAgent}
-    messages={messages}
-    isLoading={isLoading}
+    agent={isAgentSwitching ? initialSelectedAgent! : selectedAgent!}
+    messages={effectiveMessages}
+    chats={agentChats}
+    currentSessionId={currentSessionId}
+    isLoading={effectiveIsLoading}
     message={message}
     session={initialSession}
     onMessageChange={setMessage}
     onSendMessage={handleSendMessage}
+    onNewChat={handleNewChat}
+    onSelectChat={handleSwitchChat}
+    onRenameChat={handleRenameChat}
+    onDeleteChat={handleDeleteChat}
     onKeyPress={handleKeyPress}
     onBack={onBackToBrowse}
     onEdit={onEditAgent}

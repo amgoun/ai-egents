@@ -9,21 +9,21 @@ export default async function BrowsePage() {
   const supabase = await createClient()
   console.log('BrowsePage: Created supabase client')
   
-  const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-  console.log('BrowsePage: Session result:', { session: session?.user?.id, error: sessionError })
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  console.log('BrowsePage: Session result:', { user: user?.id, error: userError })
 
-  if (!session) {
-    console.log('BrowsePage: No session, redirecting to login')
+  if (!user) {
+    console.log('BrowsePage: No user, redirecting to login')
     redirect("/login")
   }
 
-  console.log('BrowsePage: User authenticated, ID:', session.user.id)
+  console.log('BrowsePage: User authenticated, ID:', user.id)
 
   // Fetch agents from database
   const { data: rawAgents, error } = await supabase
     .from('agents')
     .select('*')
-    .eq('creator_id', session.user.id)
+    .eq('creator_id', user.id)
     .order('created_at', { ascending: false })
 
   console.log('Database query result:', { rawAgents, error })

@@ -55,7 +55,7 @@ export default function TopNavbar({ activeTab, setActiveTab }: TopNavbarProps) {
               <motion.button
                 onClick={toggleTheme}
                 className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
-                  !isDark ? "bg-yellow-400 text-black" : "text-gray-600 dark:text-gray-400"
+                  !isDark ? "bg-blue-600/20 text-black" : "text-gray-600 dark:text-gray-400"
                 }`}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}

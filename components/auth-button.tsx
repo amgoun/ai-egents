@@ -25,8 +25,12 @@ export const AuthButton = () => {
   useEffect(() => {
     // Check current session
     const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      setSession(session)
+      const { data: { user } } = await supabase.auth.getUser()
+      // We only need the user object for basic auth check, but the component expects a session-like object
+      // or at least truthy value. getUser returns a User, which is sufficient.
+      // However, AuthButton seems to use `session` state to determine login status.
+      // If `user` is present, we are logged in.
+      setSession(user ? { user } : null)
       setLoading(false)
     }
     
