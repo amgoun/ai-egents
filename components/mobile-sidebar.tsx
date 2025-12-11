@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
-import { Menu, Sparkles, Globe, MessageCircle, Grid3X3, Sun, Moon } from "lucide-react"
+import { Menu, Sparkles, Globe, MessageCircle, Sun, Moon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet"
+import Image from "next/image"
+import Logo from "@/public/logo.svg"
 
 interface MobileSidebarProps {
   activeTab: string
@@ -13,6 +15,12 @@ interface MobileSidebarProps {
 
 export default function MobileSidebar({ activeTab, setActiveTab }: MobileSidebarProps) {
   const [open, setOpen] = useState(false)
+  
+  // #region agent log
+  useEffect(() => {
+    fetch('http://127.0.0.1:7242/ingest/b312a5f6-32be-4c70-ab25-adabf357af97',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mobile-sidebar.tsx:17',message:'MobileSidebar mounted',data:{activeTab,open},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
+  }, []);
+  // #endregion
 
   const menuItems = [
     { id: "create", label: "Create Agent", icon: Sparkles },
@@ -37,14 +45,14 @@ export default function MobileSidebar({ activeTab, setActiveTab }: MobileSidebar
      
           <SheetTitle className="hidden">Navigation Menu</SheetTitle>
       
-        <div className="flex flex-col h-full bg-white dark:bg-gray-800">
-          {/* Header with EQUILINK Logo */}
-          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex flex-col h-full bg-white dark:bg-[#1A1A1A]">
+          {/* Header with FlowBrain Logo */}
+          <div className="p-6 py-5 border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-black dark:bg-white rounded flex items-center justify-center">
-                <Grid3X3 className="w-4 h-4 text-white dark:text-black" />
+              <div className="w-8 h-8 flex items-center justify-center">
+                <Image src={Logo} alt="FlowBrain" width={32} height={32} />
               </div>
-              <span className="font-bold text-xl text-gray-900 dark:text-white">EQUILINK</span>
+              <span className="font-bold text-xl text-gray-900 dark:text-white uppercase">FlowBrain</span>
             </div>
           </div>
 
@@ -61,7 +69,7 @@ export default function MobileSidebar({ activeTab, setActiveTab }: MobileSidebar
                     onClick={() => handleItemClick(item.id)}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
                       isActive
-                        ? "bg-yellow-400 text-black font-medium"
+                        ? "bg-blue-600 text-white font-medium"
                         : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                     }`}
                     whileHover={{ scale: 1.02 }}
