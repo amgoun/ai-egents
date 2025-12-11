@@ -40,7 +40,7 @@ export default function TopNavbar({ activeTab, setActiveTab }: TopNavbarProps) {
   }, [])
 
   return (
-    <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
+    <nav className="bg-white dark:bg-[#1A1A1A] shadow-sm px-6 py-4">
       <div className="flex items-center justify-between">
         {/* Left side - Mobile Menu */}
         <div className="flex items-center">

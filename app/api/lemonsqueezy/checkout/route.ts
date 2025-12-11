@@ -10,30 +10,49 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Validate required environment variables
+    // Check if using the new UUID-based checkout URL (recommended)
+    const checkoutBaseUrl = process.env.LEMONSQUEEZY_CHECKOUT_URL
+    
+    if (checkoutBaseUrl) {
+      // Use the permanent checkout link from LemonSqueezy
+      const checkoutUrl = `${checkoutBaseUrl}?checkout[email]=${encodeURIComponent(user.email || '')}&checkout[custom][user_id]=${user.id}`
+      
+      console.log('✅ Generated checkout URL for user:', user.id)
+      console.log('🔗 Checkout URL:', checkoutUrl)
+      
+      return NextResponse.json({ checkoutUrl })
+    }
+
+    // Fallback to variant-based approach (legacy)
     const storeId = process.env.LEMONSQUEEZY_STORE_ID
-    // Support both VARIANT_ID and PRODUCT_ID for backwards compatibility
     const variantId = process.env.LEMONSQUEEZY_VARIANT_ID || process.env.LEMONSQUEEZY_PRODUCT_ID
     
     if (!storeId || !variantId) {
       console.error('Missing LemonSqueezy configuration:', { 
+        hasCheckoutUrl: !!checkoutBaseUrl,
         storeId: !!storeId, 
-        variantId: !!variantId,
-        hasProductId: !!process.env.LEMONSQUEEZY_PRODUCT_ID,
-        hasVariantId: !!process.env.LEMONSQUEEZY_VARIANT_ID
+        variantId: !!variantId
       })
       return NextResponse.json({ 
         error: 'Payment system not configured. Please contact support.' 
       }, { status: 500 })
     }
 
+    // Clean storeId to remove https:// or .lemonsqueezy.com if present
+    const cleanStoreId = storeId.replace('https://', '').replace('.lemonsqueezy.com', '').replace(/\/$/, '');
+    
+    // Check if storeId looks like an ID (purely numeric) which is a common mistake
+    if (/^\d+$/.test(cleanStoreId)) {
+        console.warn('⚠️ Warning: LEMONSQUEEZY_STORE_ID looks like a numeric ID. It should be the store slug (e.g., "my-store").');
+    }
+
     // Create LemonSqueezy checkout URL with proper format
-    // Format: https://STORE_NAME.lemonsqueezy.com/checkout/buy/VARIANT_ID
-    const checkoutUrl = `https://${storeId}.lemonsqueezy.com/checkout/buy/${variantId}?checkout[email]=${encodeURIComponent(user.email || '')}&checkout[custom][user_id]=${user.id}`
+    const checkoutUrl = `https://${cleanStoreId}.lemonsqueezy.com/checkout/buy/${variantId}?checkout[email]=${encodeURIComponent(user.email || '')}&checkout[custom][user_id]=${user.id}`
 
     console.log('✅ Generated checkout URL for user:', user.id)
     console.log('🔗 Checkout URL:', checkoutUrl)
-    console.log('📦 Store ID:', storeId)
+    console.log('📦 Store ID (env):', storeId)
+    console.log('📦 Store Slug (used):', cleanStoreId)
     console.log('🏷️  Variant/Product ID:', variantId)
     
     return NextResponse.json({ checkoutUrl })

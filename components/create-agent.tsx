@@ -764,7 +764,7 @@ export default function CreateAgent({ onAgentCreated, onAgentUpdated, onCancel, 
         </div>
 
         {/* Right Panel - Image Generator */}
-        <div className="w-full lg:w-1/2 p-4  min-h-[400px] lg:min-h-full">
+        <div className="w-full lg:w-1/2 p-4  min-h-[400px] lg:min-h-full bg-red">
           <AgentAvatar form={form} />
         </div>
       </div>

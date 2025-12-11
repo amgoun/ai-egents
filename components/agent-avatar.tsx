@@ -203,7 +203,7 @@ export default function AgentAvatar({ form }: AgentAvatarProps) {
             transition={{ duration: 0.5 }}
             className="text-center"
           >
-            <div className="w-24 h-24 sm:w-32 sm:h-32 lg:w-48 lg:h-48 mx-auto mb-4 rounded-lg overflow-hidden translate-y-16">
+            <div className="w-24 h-24 sm:w-32 sm:h-32 lg:w-48 lg:h-48 mx-auto mb-4 rounded-full overflow-hidden translate-y-20">
               {avatarPreview ? (
                 <>
                   <img 

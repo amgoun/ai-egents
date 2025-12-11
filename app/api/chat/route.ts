@@ -56,6 +56,37 @@ export async function POST(request: Request) {
 
     if (!existingUsage) {
       // No current usage period found, create one
+      console.log(`⚠️ No usage_limits found for user ${user.id}, creating new one`)
+      
+      // First, ensure user exists in users table
+      const { error: userCheckError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', user.id)
+        .single()
+      
+      if (userCheckError && userCheckError.code === 'PGRST116') {
+        // User doesn't exist, create it
+        console.log(`📝 Creating user record for ${user.id}`)
+        const { error: userCreateError } = await supabase
+          .from('users')
+          .insert({
+            id: user.id,
+            email: user.email,
+            name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User'
+          })
+        
+        if (userCreateError) {
+          console.error('❌ Failed to create user record:', userCreateError)
+          return NextResponse.json(
+            { error: 'Failed to initialize user account' },
+            { status: 500 }
+          )
+        }
+        console.log(`✅ Created user record for ${user.id}`)
+      }
+      
+      // Now create usage_limits
       const newPeriod = createNewUsagePeriod('free') // Default to free plan
       const { data: newUsage, error: createError } = await supabase
         .from('usage_limits')
@@ -73,12 +104,13 @@ export async function POST(request: Request) {
         .single()
 
       if (createError || !newUsage) {
-        console.error('Error creating usage limits:', createError)
+        console.error('❌ Error creating usage limits:', createError)
         return NextResponse.json(
           { error: 'Failed to initialize usage tracking' },
           { status: 500 }
         )
       }
+      console.log(`✅ Created new usage_limits (ID: ${newUsage.id})`)
       usageLimit = newUsage
     } else {
       usageLimit = existingUsage

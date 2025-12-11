@@ -101,6 +101,37 @@ export async function POST(request: Request) {
 
     if (!existingUsage) {
       // No current usage period found, create one
+      console.log(`⚠️ No usage_limits found for user ${user.id}, creating new one`)
+      
+      // First, ensure user exists in users table
+      const { error: userCheckError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', user.id)
+        .single()
+      
+      if (userCheckError && userCheckError.code === 'PGRST116') {
+        // User doesn't exist, create it
+        console.log(`📝 Creating user record for ${user.id}`)
+        const { error: userCreateError } = await supabase
+          .from('users')
+          .insert({
+            id: user.id,
+            email: user.email,
+            name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User'
+          })
+        
+        if (userCreateError) {
+          console.error('❌ Failed to create user record:', userCreateError)
+          return NextResponse.json(
+            { error: 'Failed to initialize user account' },
+            { status: 500 }
+          )
+        }
+        console.log(`✅ Created user record for ${user.id}`)
+      }
+      
+      // Now create usage_limits
       const newPeriod = createNewUsagePeriod('free')
       const { data: newUsage, error: createError } = await supabase
         .from('usage_limits')
@@ -118,15 +149,37 @@ export async function POST(request: Request) {
         .single()
 
       if (createError || !newUsage) {
-        console.error('Error creating usage limits:', createError)
+        console.error('❌ Error creating usage limits:', createError)
         return NextResponse.json(
           { error: 'Failed to initialize usage tracking' },
           { status: 500 }
         )
       }
-      usageLimit = newUsage
+      console.log(`✅ Created new usage_limits (ID: ${newUsage.id})`)
+      usageLimit = {
+        id: newUsage.id,
+        userId: newUsage.user_id,
+        tokensUsed: newUsage.tokens_used || 0,
+        tokensLimit: newUsage.tokens_limit || 250_000,
+        messageCount: newUsage.message_count || 0,
+        planType: newUsage.plan_type || 'free'
+      }
     } else {
-      usageLimit = existingUsage
+      console.log(`✅ Found existing usage_limits for user ${user.id}:`, {
+        id: existingUsage.id,
+        planType: existingUsage.plan_type,
+        tokensUsed: existingUsage.tokens_used,
+        tokensLimit: existingUsage.tokens_limit
+      })
+      // Map snake_case DB fields to camelCase
+      usageLimit = {
+        id: existingUsage.id,
+        userId: existingUsage.user_id,
+        tokensUsed: existingUsage.tokens_used || 0,
+        tokensLimit: existingUsage.tokens_limit || 250_000,
+        messageCount: existingUsage.message_count || 0,
+        planType: existingUsage.plan_type || 'free'
+      }
     }
 
     // Normalize DB fields to camelCase for internal use
@@ -346,7 +399,13 @@ export async function POST(request: Request) {
     }
 
     // Update usage limits and log token usage
-    await Promise.all([
+    console.log(`💸 Updating token usage for user ${user.id}:`)
+    console.log(`   Previous: ${usageLimit.tokensUsed} tokens`)
+    console.log(`   Used now: ${totalTokens} tokens (input: ${estimatedInputTokens}, output: ${estimatedOutputTokens})`)
+    console.log(`   New total: ${usageLimit.tokensUsed + totalTokens} tokens`)
+    console.log(`   Usage limit ID: ${usageLimit.id}`)
+    
+    const [updateResult, insertResult1, insertResult2] = await Promise.all([
       // Update usage limits
       supabase
         .from('usage_limits')
@@ -382,6 +441,20 @@ export async function POST(request: Request) {
           operation_type: 'chat'
         })
     ])
+    
+    if (updateResult.error) {
+      console.error('❌ Failed to update usage_limits:', updateResult.error)
+    } else {
+      console.log('✅ Token usage updated successfully')
+    }
+    
+    if (insertResult1.error) {
+      console.error('❌ Failed to insert token_usage (user message):', insertResult1.error)
+    }
+    
+    if (insertResult2.error) {
+      console.error('❌ Failed to insert token_usage (AI message):', insertResult2.error)
+    }
 
     return NextResponse.json({
       sessionId,

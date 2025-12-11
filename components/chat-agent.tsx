@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react"
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from "@/components/ui/use-toast"
+import { useTokenLimits } from "@/hooks/use-token-limits"
 import type { Agent, ChatMessage } from '@/lib/db/schema'
 import type { ChatSession } from './chat/types'
 import type { Session } from '@supabase/supabase-js'
@@ -27,6 +28,7 @@ export default function ChatAgent({
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
   const supabase = createClient()
+  const { refreshUsage } = useTokenLimits(initialSession?.user?.id)
 
   // Get state and actions from Zustand store
   const {
@@ -154,6 +156,12 @@ export default function ChatAgent({
       data.messages.forEach((msg: ChatMessage) => {
         addMessage(msg)
       })
+
+      // Refresh token usage to show updated count (with small delay to ensure DB update completes)
+      setTimeout(() => {
+        refreshUsage()
+        console.log('🔄 Token usage refreshed after message response')
+      }, 500)
 
     } catch (error) {
       console.error('Error sending message:', error)

@@ -62,16 +62,27 @@ export function useTokenLimits(userId: string | undefined) {
         .limit(1)
         .single()
 
-      if (usageError && usageError.code !== 'PGRST116') {
-        // PGRST116 is "no rows returned", which we handle below
-        throw usageError
+      if (usageError) {
+        // PGRST116 is "no rows returned", which is expected for new users
+        if (usageError.code !== 'PGRST116') {
+          console.error('Supabase usage query error:', {
+            code: usageError.code,
+            message: usageError.message,
+            details: usageError.details,
+            hint: usageError.hint,
+            userId
+          })
+          throw usageError
+        }
       }
 
       if (!usage) {
-        // No current usage period found, user might need initialization
+        // No current usage period found - show default free tier
+        // The usage_limits record will be created automatically when user first chats
+        console.log('ℹ️ No usage_limits found for user (will be created on first chat)')
         setData({
           usage: null,
-          remainingTokens: 250_000, // Default free limit
+          remainingTokens: 250_000,
           usagePercentage: 0,
           hasExceeded: false,
           formattedUsage: '0',
@@ -85,6 +96,8 @@ export function useTokenLimits(userId: string | undefined) {
         setIsLoading(false)
         return
       }
+      
+      console.log('✅ Fetched usage_limits:', usage)
 
       // Supabase returns snake_case columns; map to camelCase to match our schema types
       const mappedUsage: UsageLimit = {
@@ -137,7 +150,12 @@ export function useTokenLimits(userId: string | undefined) {
       })
 
     } catch (err) {
-      console.error('Error fetching token usage:', err)
+      console.error('Error fetching token usage:', {
+        error: err,
+        message: err instanceof Error ? err.message : 'Unknown error',
+        stack: err instanceof Error ? err.stack : undefined,
+        userId
+      })
       setError(err instanceof Error ? err.message : 'Failed to fetch token usage')
     } finally {
       setIsLoading(false)
@@ -187,9 +205,13 @@ export function useTokenLimits(userId: string | undefined) {
     }
   }, [userId, fetchUsage])
 
-  // Refresh usage data
-  const refreshUsage = useCallback(() => {
-    fetchUsage()
+  // Refresh usage data and notify all components
+  const refreshUsage = useCallback(async () => {
+    console.log('🔄 Refreshing token usage and notifying all components...')
+    await fetchUsage()
+    // Dispatch event to notify other components using this hook
+    window.dispatchEvent(new Event('tokenUsageUpdated'))
+    console.log('✅ Token usage refresh complete and event dispatched')
   }, [fetchUsage])
 
   // Check if user can perform an action (based on estimated token cost)
@@ -200,6 +222,17 @@ export function useTokenLimits(userId: string | undefined) {
 
   useEffect(() => {
     fetchUsage()
+  }, [fetchUsage])
+
+  // Listen for token usage updates from other components
+  useEffect(() => {
+    const handleTokenUpdate = () => {
+      console.log('🔔 Token update event received, refreshing...')
+      fetchUsage()
+    }
+
+    window.addEventListener('tokenUsageUpdated', handleTokenUpdate)
+    return () => window.removeEventListener('tokenUsageUpdated', handleTokenUpdate)
   }, [fetchUsage])
 
   return {

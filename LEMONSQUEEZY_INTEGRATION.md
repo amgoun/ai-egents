@@ -29,13 +29,14 @@ Integrate LemonSqueezy for Pro plan payments ($30/month) that gives users:
    ```env
    LEMONSQUEEZY_API_KEY=your_api_key_here
    LEMONSQUEEZY_STORE_ID=your_store_name
-   LEMONSQUEEZY_VARIANT_ID=your_variant_id
+   LEMONSQUEEZY_CHECKOUT_URL=https://your-store.lemonsqueezy.com/buy/YOUR-UUID-HERE
    LEMONSQUEEZY_WEBHOOK_SECRET=your_webhook_secret
    ```
    
    **Important:**
-   - `LEMONSQUEEZY_STORE_ID` = Your store name/slug (e.g., "my-store")
-   - `LEMONSQUEEZY_VARIANT_ID` = The variant ID from your product (not product ID)
+   - `LEMONSQUEEZY_STORE_ID` = Your store name/slug (e.g., "amgounstudio")
+   - `LEMONSQUEEZY_CHECKOUT_URL` = The full "Buy" URL from LemonSqueezy (e.g., "https://yourstore.lemonsqueezy.com/buy/16bbb659-...")
+   - Get the checkout URL from: Product page → "Get checkout link" button in LemonSqueezy dashboard
 
 ---
 
@@ -261,7 +262,7 @@ const handleUpgrade = async () => {
 # LemonSqueezy
 LEMONSQUEEZY_API_KEY=lemon_api_xxx
 LEMONSQUEEZY_STORE_ID=your-store-name
-LEMONSQUEEZY_VARIANT_ID=123456
+LEMONSQUEEZY_CHECKOUT_URL=https://your-store.lemonsqueezy.com/buy/YOUR-UUID
 LEMONSQUEEZY_WEBHOOK_SECRET=whsec_xxx
 
 # Existing
